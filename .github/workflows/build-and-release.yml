@@ -1,6 +1,6 @@
 # 构建、测试与发布：
-# - main 分支 / 拉取请求：构建并上传 DeepSeekHarnessBox.exe 构建产物（含版本号、校验和）
-# - 推送 v* tag：额外创建 GitHub Release 并附上 exe 与校验和
+# - 推送 v* tag：构建 DeepSeekHarnessBox.exe 并创建 GitHub Release（含版本号、校验和）
+# - workflow_dispatch：手动触发构建（不发布 Release）
 #
 # 构建需要 Node.js + DeepSeek Harness（DSH）来生成内嵌 payload：
 # - setup-node 安装 Node.js 24
@@ -9,13 +9,8 @@ name: build-and-release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
