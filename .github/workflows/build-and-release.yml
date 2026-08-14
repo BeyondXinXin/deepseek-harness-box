@@ -1,0 +1,91 @@
+# 构建、测试与发布：
+# - main 分支 / 拉取请求：构建并上传 HarnessBox.exe 构建产物（含版本号、校验和）
+# - 推送 v* tag：额外创建 GitHub Release 并附上 exe 与校验和
+#
+# 构建需要 Node.js + DeepSeek Harness（DSH）来生成内嵌 payload：
+# - setup-node 安装 Node.js 24
+# - npm 全局安装 @deepseek-ai/dsh（公共包，构建时会被打包进 HarnessBox.exe）
+name: build-and-release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 安装 DeepSeek Harness (DSH)
+        shell: pwsh
+        run: |
+          # 内测版固定到当前验证过的 rc 版本，升级时同步修改这里。
+          npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+
+      - name: 计算版本号
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME
+          } else {
+            $version = git describe --tags --always --dirty
+          }
+          if (-not $version) { $version = 'dev' }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "version=$version"
+
+      - name: 构建 HarnessBox.exe
+        shell: cmd
+        env:
+          HARNESSBOX_VERSION: ${{ steps.version.outputs.version }}
+        run: build.cmd
+
+      - name: 运行单元测试
+        shell: pwsh
+        run: go test ./...
+
+      - name: 生成 SHA256 校验和
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 .\HarnessBox.exe).Hash.ToLower()
+          "HarnessBox.exe  $hash" | Out-File -FilePath "HarnessBox-${{ steps.version.outputs.version }}.sha256" -Encoding ascii
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: HarnessBox-${{ steps.version.outputs.version }}
+          path: |
+            HarnessBox.exe
+            HarnessBox-*.sha256
+
+      - name: 发布 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            HarnessBox.exe
+            HarnessBox-*.sha256
+          generate_release_notes: true

@@ -1,0 +1,12 @@
+# 参考项目（本地习惯参考，不纳入版本库）
+参考/
+
+# 构建产物
+HarnessBox.exe
+payload/payload.zip
+payload/.payload-version
+*.syso
+
+# Go
+*.test
+*.out
