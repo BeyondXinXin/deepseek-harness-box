@@ -16,7 +16,9 @@ import (
 	"github.com/BeyondXinXin/harnessbox/internal/portcheck"
 	hbruntime "github.com/BeyondXinXin/harnessbox/internal/runtime"
 	"github.com/BeyondXinXin/harnessbox/internal/runlog"
+	"github.com/BeyondXinXin/harnessbox/internal/shortcut"
 	"github.com/BeyondXinXin/harnessbox/internal/tray"
+	"github.com/BeyondXinXin/harnessbox/internal/ui"
 	"github.com/BeyondXinXin/harnessbox/internal/version"
 	"github.com/BeyondXinXin/harnessbox/internal/winutil"
 )
@@ -73,8 +75,33 @@ func Main() {
 		}
 	}
 
-	runtimeDir, err := hbruntime.Extract(dataDir, version.Version, logger)
-	if err != nil {
+	runtimeDir := config.RuntimeDir(dataDir)
+	extract := func() error {
+		dir, err := hbruntime.Extract(dataDir, version.Version, logger)
+		if err == nil {
+			runtimeDir = dir
+		}
+		return err
+	}
+	if hbruntime.NeedsExtract(runtimeDir, version.Version) {
+		// 首次启动（或版本升级）需要解压运行环境，弹出「正在初始化」窗口
+		// 避免用户误以为卡死；释放成功后顺手在桌面创建快捷方式。
+		logger.Printf("首次启动：释放运行环境到 %s", runtimeDir)
+		err = ui.RunBusy(
+			"正在初始化运行环境，请稍候\n首次启动需要将运行环境释放到本地，可能需要一点时间",
+			extract,
+		)
+		if err != nil {
+			logger.Printf("释放运行环境失败: %v", err)
+			winutil.MessageBox(0, "HarnessBox", "释放运行环境失败：\r\n"+err.Error(), winutil.MBIconError)
+			return
+		}
+		if linkPath, linkErr := createDesktopShortcut(); linkErr != nil {
+			logger.Printf("创建桌面快捷方式失败: %v", linkErr)
+		} else {
+			logger.Printf("桌面快捷方式已创建: %s", linkPath)
+		}
+	} else if err = extract(); err != nil {
 		logger.Printf("释放运行环境失败: %v", err)
 		winutil.MessageBox(0, "HarnessBox", "释放运行环境失败：\r\n"+err.Error(), winutil.MBIconError)
 		return
@@ -99,6 +126,9 @@ func Main() {
 		return
 	}
 
+	// 诊断：确认 API Key 凭据在界面中可编辑（未被视为「由启动环境提供」）。
+	launcher.LogCredentialState(url, logger)
+
 	if err := browser.Open(url); err != nil {
 		logger.Printf("打开浏览器失败: %v", err)
 		winutil.MessageBox(0, "HarnessBox", "已启动，但打开浏览器失败：\r\n"+err.Error()+"\r\n\r\n请手动访问 "+url, winutil.MBIconWarning)
@@ -117,6 +147,15 @@ func Main() {
 
 	process.Stop()
 	logger.Printf("HarnessBox 已退出")
+}
+
+// createDesktopShortcut 在用户桌面创建指向当前可执行文件的快捷方式。
+func createDesktopShortcut() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return shortcut.Create("HarnessBox.lnk", executable, "HarnessBox 本地 AI 运行环境")
 }
 
 // parsePortArg 解析 --port N 或 --port=N。返回 (端口, 是否显式指定)。

@@ -17,6 +17,12 @@ import (
 
 const versionFile = ".version"
 
+// NeedsExtract 报告运行环境是否需要（重新）释放：目录不存在或版本标记与
+// 当前版本不一致。调用方据此决定是否展示初始化提示窗口。
+func NeedsExtract(dir, version string) bool {
+	return !upToDate(dir, version)
+}
+
 // Extract 确保 base 下的运行环境目录已释放为当前版本。版本未变化时跳过解压。
 // 返回运行环境根目录（内含 node/ 与 dsh/）。
 func Extract(base, version string, logger *runlog.Logger) (string, error) {
