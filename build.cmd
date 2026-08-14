@@ -10,6 +10,15 @@ exit /b 1
 
 :go_found
 
+rem Local convenience: activate the portable Node install when present, so
+rem build.cmd works from any shell (PowerShell, Git Bash, double-click)
+rem without manual PATH setup. CI runners don't have this path, so nothing
+rem changes there (setup-node's PATH and npm global prefix are used as-is).
+if exist "E:\DevTools\Node\node-v24.19.0\node.exe" (
+    set "PATH=E:\DevTools\Node\node-v24.19.0;E:\DevTools\Node\data\npm;%PATH%"
+    set "NPM_CONFIG_PREFIX=E:\DevTools\Node\data\npm"
+)
+
 if not exist assets\harnessbox.ico "%GO_EXE%" run .\cmd\makeicon
 if errorlevel 1 exit /b 1
 
