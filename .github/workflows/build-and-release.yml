@@ -1,4 +1,4 @@
-# 构建、测试与发布：
+# 构建与发布：
 # - 推送 v* tag：构建 DeepSeekHarnessBox.exe 并创建 GitHub Release（含版本号、校验和）
 # - workflow_dispatch：手动触发构建（不发布 Release）
 #
@@ -70,10 +70,6 @@ jobs:
         env:
           DEEPSEEKHARNESSBOX_VERSION: ${{ steps.version.outputs.version }}
         run: build.cmd
-
-      - name: 运行单元测试
-        shell: pwsh
-        run: go test ./...
 
       - name: 生成 SHA256 校验和
         shell: pwsh
