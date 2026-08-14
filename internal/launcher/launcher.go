@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -72,6 +73,30 @@ type Process struct {
 	waitErr  error
 }
 
+// inheritedCredentialEnv 是从父进程继承环境中剔除的 API Key 变量。dsh 把
+// 继承环境中的 API Key 视为「由启动环境提供（只读）」，会锁死 Web 界面
+// 「设置 → 模型」的密钥输入框；剔除后用户即可在界面中直接输入自己的 Key。
+var inheritedCredentialEnv = map[string]struct{}{
+	"DEEPSEEK_API_KEY": {},
+}
+
+// filterInheritedEnv 返回剔除 inheritedCredentialEnv 之后的继承环境列表。
+// Windows 环境变量名不区分大小写，比较前统一转大写。
+func filterInheritedEnv(environ []string) []string {
+	filtered := environ[:0]
+	for _, entry := range environ {
+		name := entry
+		if index := strings.IndexByte(entry, '='); index >= 0 {
+			name = entry[:index]
+		}
+		if _, blocked := inheritedCredentialEnv[strings.ToUpper(name)]; blocked {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
 // Start 启动 node.exe <script> web --port <port>，并把它挂到 kill-on-close 的
 // Job 对象上，保证 HarnessBox 退出（含被强杀）时整棵进程树一起结束。
 func Start(nodePath, scriptPath, dshHome, cwd string, port int, logger *runlog.Logger) (*Process, error) {
@@ -79,8 +104,9 @@ func Start(nodePath, scriptPath, dshHome, cwd string, port int, logger *runlog.L
 	cmd.Dir = cwd
 	// DSH_HOME 指向 HarnessBox 自己的数据目录；原生插件缓存也重定向到
 	// 同一数据目录下，避免第三方插件往 LOCALAPPDATA 根目录写缓存。
+	// 继承环境中剔除 API Key 变量，避免界面把它锁成「由启动环境提供（只读）」。
 	nativeCacheDir := filepath.Join(filepath.Dir(dshHome), "native-cache")
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(filterInheritedEnv(os.Environ()),
 		"DSH_HOME="+dshHome,
 		"NARB_NATIVE_CACHE_DIR="+nativeCacheDir,
 	)

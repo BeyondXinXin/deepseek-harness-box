@@ -15,6 +15,7 @@ type Actions struct {
 
 const (
 	wmRButtonUp     = 0x0205
+	wmContextMenu   = 0x007B
 	wmLButtonDblClk = 0x0203
 	wmDestroy       = 0x0002
 
@@ -24,7 +25,10 @@ const (
 	nifMessage        = 0x00000001
 	nifIcon           = 0x00000002
 	nifTip            = 0x00000004
-	notifyIconVersion = 4
+	// 与 lxn/walk（ModelPilot 同款）一致使用版本 3：lParam 即鼠标消息，
+	// 语义简单稳定；版本 4 的 lParam 低字为 Shell 通知事件、高字为图标
+	// ID，不同 Windows 版本投递行为不一致。
+	notifyIconVersion = 3
 
 	imageIcon     = 1
 	lrDefaultSize = 0x0040
@@ -73,6 +77,7 @@ var (
 	procTrackPopupMenu         = user32.NewProc("TrackPopupMenu")
 	procSetForegroundWindow    = user32.NewProc("SetForegroundWindow")
 	procPostMessageW           = user32.NewProc("PostMessageW")
+	procSendMessageW           = user32.NewProc("SendMessageW")
 	procGetCursorPos           = user32.NewProc("GetCursorPos")
 	procDestroyMenu            = user32.NewProc("DestroyMenu")
 	procRegisterWindowMessageW = user32.NewProc("RegisterWindowMessageW")
@@ -203,7 +208,7 @@ func Run(actions Actions) error {
 	t.nid = notifyIconData{
 		cbSize:           uint32(unsafe.Sizeof(notifyIconData{})),
 		hWnd:             hwnd,
-		uID:              1,
+		uID:              0, // 与 lxn/walk 一致：uID 为 0，图标事件由 hWnd 定位
 		uFlags:           nifMessage | nifIcon | nifTip,
 		uCallbackMessage: trayCallbackMessage,
 		hIcon:            icon,
@@ -230,8 +235,14 @@ func wndProc(hwnd, message, wParam, lParam uintptr) uintptr {
 	msgID := uint32(message)
 	switch msgID {
 	case trayCallbackMessage:
-		switch uint32(lParam) {
+		// 版本 3 下 lParam 即鼠标消息，wParam 为图标 ID（uID=0）；取低
+		// 16 位比较以兼容个别 Shell 实现把 ID 放进高字的行为。
+		switch uint16(lParam) {
 		case wmRButtonUp:
+			// 与 lxn/walk 相同：把右键统一重投递为 WM_CONTEXTMENU，
+			// 使鼠标右键与键盘菜单键走同一条弹出菜单路径。
+			procSendMessageW.Call(hwnd, trayCallbackMessage, wParam, wmContextMenu)
+		case wmContextMenu:
 			showMenu(hwnd)
 		case wmLButtonDblClk:
 			openAction()
