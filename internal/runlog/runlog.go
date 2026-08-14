@@ -14,12 +14,12 @@ type Logger struct {
 	log  *log.Logger
 }
 
-// Open 在 logsDir 下打开（或创建）HarnessBox.log 并返回追加式日志器。
+// Open 在 logsDir 下打开（或创建）DeepSeekHarnessBox.log 并返回追加式日志器。
 func Open(logsDir string) (*Logger, error) {
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(logsDir, "HarnessBox.log")
+	path := filepath.Join(logsDir, "DeepSeekHarnessBox.log")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err

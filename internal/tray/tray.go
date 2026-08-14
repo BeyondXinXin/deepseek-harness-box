@@ -1,4 +1,4 @@
-// Package tray 提供 Windows 通知区域图标（托盘），作为 HarnessBox 的唯一
+// Package tray 提供 Windows 通知区域图标（托盘），作为 DeepSeekHarnessBox 的唯一
 // 界面：右键菜单可打开浏览器或退出，双击图标打开浏览器。
 package tray
 
@@ -162,7 +162,7 @@ func Run(actions Actions) error {
 	t := &tray{
 		actions:   actions,
 		hInstance: hInstance,
-		className: "BeyondXinXin.HarnessBox.Tray",
+		className: "BeyondXinXin.DeepSeekHarnessBox.Tray",
 	}
 	active = t
 
@@ -213,7 +213,7 @@ func Run(actions Actions) error {
 		uCallbackMessage: trayCallbackMessage,
 		hIcon:            icon,
 	}
-	copy(t.nid.szTip[:], utf16FromString("HarnessBox"))
+	copy(t.nid.szTip[:], utf16FromString("DeepSeekHarnessBox"))
 	if added, _, _ := procShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&t.nid))); added == 0 {
 		procDestroyWindow.Call(hwnd)
 		active = nil
@@ -273,7 +273,7 @@ func showMenu(hwnd uintptr) {
 	}
 	defer procDestroyMenu.Call(menu)
 
-	openPtr, _ := syscall.UTF16PtrFromString("打开 HarnessBox")
+	openPtr, _ := syscall.UTF16PtrFromString("打开 DeepSeekHarnessBox")
 	exitPtr, _ := syscall.UTF16PtrFromString("退出")
 	_, _, _ = procAppendMenuW.Call(menu, mfString, menuOpen, uintptr(unsafe.Pointer(openPtr)))
 	_, _, _ = procAppendMenuW.Call(menu, mfSeparator, 0, 0)

@@ -15,7 +15,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/BeyondXinXin/harnessbox/internal/runlog"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/runlog"
 )
 
 const (
@@ -102,11 +102,11 @@ func splitCredentialEnv(environ []string) (plain, credentials []string) {
 }
 
 // Start 启动 node.exe <script> web --port <port>，并把它挂到 kill-on-close 的
-// Job 对象上，保证 HarnessBox 退出（含被强杀）时整棵进程树一起结束。
+// Job 对象上，保证 DeepSeekHarnessBox 退出（含被强杀）时整棵进程树一起结束。
 func Start(nodePath, scriptPath, dshHome, cwd string, port int, logger *runlog.Logger) (*Process, error) {
 	cmd := exec.Command(nodePath, scriptPath, "web", "--port", strconv.Itoa(port))
 	cmd.Dir = cwd
-	// DSH_HOME 指向 HarnessBox 自己的数据目录；原生插件缓存也重定向到
+	// DSH_HOME 指向 DeepSeekHarnessBox 自己的数据目录；原生插件缓存也重定向到
 	// 同一数据目录下，避免第三方插件往 LOCALAPPDATA 根目录写缓存。
 	// 继承环境中剔除全部 API Key 变量，避免界面把它们锁成「由启动环境
 	// 提供（只读）」；剔除结果写入日志，便于定位「API 无法设置」问题。
@@ -202,7 +202,7 @@ func WaitReady(url string, timeout time.Duration, logger *runlog.Logger) error {
 
 // credentialDescribeBody 是 credentials.describe 的 RPC 请求体；rpcId 固定，
 // 便于在日志中检索。
-const credentialDescribeBody = `{"type":"client-request","rpcId":"harnessbox-diag","method":"credentials.describe","payload":{"refs":["DEEPSEEK_API_KEY"]}}`
+const credentialDescribeBody = `{"type":"client-request","rpcId":"deepseek-harness-box-diag","method":"credentials.describe","payload":{"refs":["DEEPSEEK_API_KEY"]}}`
 
 // LogCredentialState 通过本地 dsh 的 /api 接口查询 DEEPSEEK_API_KEY 凭据的
 // 实际状态并写入日志，用于诊断「由启动环境提供（只读）」：writable=false

@@ -1,4 +1,4 @@
-// Package config 提供 HarnessBox 的路径约定与本地服务配置。
+// Package config 提供 DeepSeekHarnessBox 的路径约定与本地服务配置。
 package config
 
 import (
@@ -10,17 +10,17 @@ import (
 
 const (
 	// AppVendor 是厂商目录名，数据根目录最终落在
-	// %LOCALAPPDATA%\BeyondXinXin\HarnessBox。
+	// %LOCALAPPDATA%\BeyondXinXin\DeepSeekHarnessBox。
 	AppVendor = "BeyondXinXin"
 	// AppName 是应用数据目录名。
-	AppName = "HarnessBox"
+	AppName = "DeepSeekHarnessBox"
 	// DefaultHost 是 dsh web 的监听地址。
 	DefaultHost = "127.0.0.1"
 )
 
-// Directory 返回 HarnessBox 的数据根目录，默认
-// %LOCALAPPDATA%\BeyondXinXin\HarnessBox；LOCALAPPDATA 缺失时回退到
-// fallbackDir\BeyondXinXin\HarnessBox。
+// Directory 返回 DeepSeekHarnessBox 的数据根目录，默认
+// %LOCALAPPDATA%\BeyondXinXin\DeepSeekHarnessBox；LOCALAPPDATA 缺失时回退到
+// fallbackDir\BeyondXinXin\DeepSeekHarnessBox。
 func Directory(fallbackDir string) string {
 	if local := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); local != "" {
 		return filepath.Join(local, AppVendor, AppName)

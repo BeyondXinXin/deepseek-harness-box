@@ -4,7 +4,7 @@ package version
 import "strings"
 
 // Version 由构建时通过
-// -ldflags "-X github.com/BeyondXinXin/harnessbox/internal/version.Version=..."
+// -ldflags "-X github.com/BeyondXinXin/deepseek-harness-box/internal/version.Version=..."
 // 注入；本地开发或未注入时保持默认值 "dev"。它同时用作 payload 的版本标记：
 // 版本变化时运行环境会被重新释放。
 var Version = "dev"

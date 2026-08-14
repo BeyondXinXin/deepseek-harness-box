@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BeyondXinXin/harnessbox/internal/runlog"
-	"github.com/BeyondXinXin/harnessbox/internal/winutil"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/runlog"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/winutil"
 )
 
 const (

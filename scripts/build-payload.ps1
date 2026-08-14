@@ -13,10 +13,21 @@ param(
     [string]$Output  = "",
     [string]$Version = "dev",
     [ValidateSet("Optimal", "Fastest", "NoCompression")]
-    [string]$Compression = "Optimal"
+    [string]$Compression = "Optimal",
+    [switch]$ProbeDshVersion
 )
 
 $ErrorActionPreference = "Stop"
+
+# Probe-only mode: print the installed DSH package version and exit, used by
+# build.cmd to decide whether the payload needs rebuilding.
+if ($ProbeDshVersion) {
+    $dir = $DshDir
+    if (-not $dir) { $dir = Resolve-DshDir }
+    $pkg = Get-Content (Join-Path $dir "package.json") -Raw | ConvertFrom-Json
+    Write-Output $pkg.version
+    exit 0
+}
 
 function Test-DshDir {
     param([string]$Path)
@@ -75,6 +86,15 @@ function Resolve-DshDir {
 $nodeDir = Resolve-NodeDir
 $dshDir  = Resolve-DshDir
 
+# 读取 DSH 包版本（package.json 的 version 字段），写入打包元数据与
+# 版本标记，供 build.cmd 判断 payload 是否需要重建。
+$dshVersion = "unknown"
+$pkgPath = Join-Path $dshDir "package.json"
+if (Test-Path $pkgPath) {
+    $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
+    if ($pkg.version) { $dshVersion = $pkg.version }
+}
+
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $outputPath = $Output
 if (-not $outputPath) { $outputPath = Join-Path $repoRoot "payload\payload.zip" }
@@ -85,7 +105,9 @@ Write-Host "DSH dir  : $dshDir"
 Write-Host "Output   : $outputPath"
 Write-Host "Version  : $Version"
 
-$staging = Join-Path ([System.IO.Path]::GetTempPath()) ("harnessbox-payload-" + [guid]::NewGuid().ToString("N"))
+# Keep the staging dir name short: some dsh files have very long paths
+# that would hit the Windows 260-char path limit when prefixed by TEMP.
+$staging = Join-Path ([System.IO.Path]::GetTempPath()) ("hbx-payload-" + [guid]::NewGuid().ToString("N"))
 $stageNode = Join-Path $staging "node"
 $stageDsh  = Join-Path $staging "dsh"
 try {
@@ -110,7 +132,7 @@ try {
     $meta = [ordered]@{
         version = $Version
         node    = (Split-Path $nodeDir -Leaf)
-        dsh     = (Split-Path $dshDir -Leaf)
+        dsh     = $dshVersion
     }
     $meta | ConvertTo-Json | Set-Content -Path (Join-Path $staging "payload.json") -Encoding UTF8
 
@@ -125,6 +147,12 @@ try {
 
     $sizeMB = [math]::Round((Get-Item $outputPath).Length / 1MB, 1)
     Write-Host "Built: $outputPath ($sizeMB MB)"
+
+    # Build fingerprint: DeepSeekHarnessBox version + DSH version; either
+    # change triggers a rebuild. Separator is "+" (not "|") to match build.cmd,
+    # where a pipe inside if (...) would be parsed as a pipe even when quoted.
+    $marker = Join-Path $outDir ".payload-version"
+    "$Version+$dshVersion" | Set-Content -Path $marker -Encoding ascii -NoNewline
 }
 finally {
     if (Test-Path $staging) { Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue }

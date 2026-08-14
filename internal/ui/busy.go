@@ -143,7 +143,7 @@ func createWindow(message string) uintptr {
 	if hInstance == 0 {
 		return 0
 	}
-	className := "BeyondXinXin.HarnessBox.Busy"
+	className := "BeyondXinXin.DeepSeekHarnessBox.Busy"
 	classNamePtr, err := syscall.UTF16PtrFromString(className)
 	if err != nil {
 		return 0
@@ -170,7 +170,7 @@ func createWindow(message string) uintptr {
 	x := (int32(screenW) - int32(width)) / 2
 	y := (int32(screenH) - int32(height)) / 2
 
-	titlePtr, _ := syscall.UTF16PtrFromString("HarnessBox")
+	titlePtr, _ := syscall.UTF16PtrFromString("DeepSeekHarnessBox")
 	hwnd, _, _ := procCreateWindowExW.Call(
 		wsExTopmost,
 		uintptr(unsafe.Pointer(classNamePtr)),
@@ -312,7 +312,7 @@ func cleanup() {
 	if state != nil && state.font != 0 {
 		_, _, _ = procDeleteObject.Call(state.font)
 	}
-	classNamePtr, _ := syscall.UTF16PtrFromString("BeyondXinXin.HarnessBox.Busy")
+	classNamePtr, _ := syscall.UTF16PtrFromString("BeyondXinXin.DeepSeekHarnessBox.Busy")
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 	_, _, _ = procUnregisterClassW.Call(uintptr(unsafe.Pointer(classNamePtr)), hInstance)
 	state = nil

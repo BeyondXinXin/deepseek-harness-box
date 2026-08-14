@@ -1,4 +1,4 @@
-// Package app 负责 HarnessBox 的启动编排：单实例锁、选择端口、释放运行环境、
+// Package app 负责 DeepSeekHarnessBox 的启动编排：单实例锁、选择端口、释放运行环境、
 // 启动 dsh web、打开浏览器、托盘消息循环与退出清理。
 package app
 
@@ -10,22 +10,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BeyondXinXin/harnessbox/internal/browser"
-	"github.com/BeyondXinXin/harnessbox/internal/config"
-	"github.com/BeyondXinXin/harnessbox/internal/launcher"
-	"github.com/BeyondXinXin/harnessbox/internal/portcheck"
-	hbruntime "github.com/BeyondXinXin/harnessbox/internal/runtime"
-	"github.com/BeyondXinXin/harnessbox/internal/runlog"
-	"github.com/BeyondXinXin/harnessbox/internal/shortcut"
-	"github.com/BeyondXinXin/harnessbox/internal/tray"
-	"github.com/BeyondXinXin/harnessbox/internal/ui"
-	"github.com/BeyondXinXin/harnessbox/internal/version"
-	"github.com/BeyondXinXin/harnessbox/internal/winutil"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/browser"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/config"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/launcher"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/portcheck"
+	hbruntime "github.com/BeyondXinXin/deepseek-harness-box/internal/runtime"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/runlog"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/shortcut"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/tray"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/ui"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/version"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/winutil"
 )
 
-const singleInstanceName = `Local\BeyondXinXin.HarnessBox.Instance`
+const singleInstanceName = `Local\BeyondXinXin.DeepSeekHarnessBox.Instance`
 
-// Main 是 HarnessBox 的入口。
+// Main 是 DeepSeekHarnessBox 的入口。
 func Main() {
 	runtime.LockOSThread()
 
@@ -33,7 +33,7 @@ func Main() {
 
 	instance, alreadyRunning, err := winutil.AcquireSingleInstance(singleInstanceName)
 	if err != nil {
-		winutil.MessageBox(0, "HarnessBox", "创建单进程锁失败：\r\n"+err.Error(), winutil.MBIconError)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "创建单进程锁失败：\r\n"+err.Error(), winutil.MBIconError)
 		return
 	}
 	if alreadyRunning {
@@ -42,25 +42,25 @@ func Main() {
 			port = portcheck.DefaultPort
 		}
 		_ = browser.Open(config.URL(port))
-		winutil.MessageBox(0, "HarnessBox", "HarnessBox 已在运行。", winutil.MBIconInformation)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "DeepSeekHarnessBox 已在运行。", winutil.MBIconInformation)
 		return
 	}
 	defer instance.Close()
 
 	dataDir := config.Directory(executableDir())
 	if err := config.Ensure(dataDir); err != nil {
-		winutil.MessageBox(0, "HarnessBox", "创建运行目录失败：\r\n"+err.Error(), winutil.MBIconError)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "创建运行目录失败：\r\n"+err.Error(), winutil.MBIconError)
 		return
 	}
 	logger, err := runlog.Open(config.LogsDir(dataDir))
 	if err != nil {
-		winutil.MessageBox(0, "HarnessBox", "打开日志失败：\r\n"+err.Error(), winutil.MBIconError)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "打开日志失败：\r\n"+err.Error(), winutil.MBIconError)
 		return
 	}
 	defer logger.Close()
-	logger.Printf("HarnessBox 启动（版本 %s）", version.Display())
+	logger.Printf("DeepSeekHarnessBox 启动（版本 %s）", version.Display())
 
-	// 选择端口：显式 --port 优先；否则扫描 3080~3089，先清理 DSH/HarnessBox
+	// 选择端口：显式 --port 优先；否则扫描 3080~3089，先清理 DSH/DeepSeekHarnessBox
 	// 残留，再按 3081 → 3082..3089 → 3080 的偏好选择第一个空闲端口。
 	var port int
 	if hasExplicitPort {
@@ -70,7 +70,7 @@ func Main() {
 		port, err = portcheck.FreePort(logger)
 		if err != nil {
 			logger.Printf("选择端口失败: %v", err)
-			winutil.MessageBox(0, "HarnessBox", "启动失败：\r\n"+err.Error(), winutil.MBIconError)
+			winutil.MessageBox(0, "DeepSeekHarnessBox", "启动失败：\r\n"+err.Error(), winutil.MBIconError)
 			return
 		}
 	}
@@ -93,7 +93,7 @@ func Main() {
 		)
 		if err != nil {
 			logger.Printf("释放运行环境失败: %v", err)
-			winutil.MessageBox(0, "HarnessBox", "释放运行环境失败：\r\n"+err.Error(), winutil.MBIconError)
+			winutil.MessageBox(0, "DeepSeekHarnessBox", "释放运行环境失败：\r\n"+err.Error(), winutil.MBIconError)
 			return
 		}
 		if linkPath, linkErr := createDesktopShortcut(); linkErr != nil {
@@ -114,7 +114,7 @@ func Main() {
 	process, err := launcher.Start(nodePath, scriptPath, dshHome, workspaceDir(), port, logger)
 	if err != nil {
 		logger.Printf("启动失败: %v", err)
-		winutil.MessageBox(0, "HarnessBox", "启动失败：\r\n"+err.Error(), winutil.MBIconError)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "启动失败：\r\n"+err.Error(), winutil.MBIconError)
 		return
 	}
 
@@ -122,7 +122,7 @@ func Main() {
 	if err := launcher.WaitReady(url, 45*time.Second, logger); err != nil {
 		logger.Printf("等待服务就绪失败: %v", err)
 		process.Stop()
-		winutil.MessageBox(0, "HarnessBox", "启动失败：\r\n"+err.Error()+"\r\n\r\n请查看日志：\r\n"+logger.Path, winutil.MBIconError)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "启动失败：\r\n"+err.Error()+"\r\n\r\n请查看日志：\r\n"+logger.Path, winutil.MBIconError)
 		return
 	}
 
@@ -131,7 +131,7 @@ func Main() {
 
 	if err := browser.Open(url); err != nil {
 		logger.Printf("打开浏览器失败: %v", err)
-		winutil.MessageBox(0, "HarnessBox", "已启动，但打开浏览器失败：\r\n"+err.Error()+"\r\n\r\n请手动访问 "+url, winutil.MBIconWarning)
+		winutil.MessageBox(0, "DeepSeekHarnessBox", "已启动，但打开浏览器失败：\r\n"+err.Error()+"\r\n\r\n请手动访问 "+url, winutil.MBIconWarning)
 	}
 
 	err = tray.Run(tray.Actions{
@@ -146,7 +146,7 @@ func Main() {
 	}
 
 	process.Stop()
-	logger.Printf("HarnessBox 已退出")
+	logger.Printf("DeepSeekHarnessBox 已退出")
 }
 
 // createDesktopShortcut 在用户桌面创建指向当前可执行文件的快捷方式。
@@ -155,7 +155,7 @@ func createDesktopShortcut() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return shortcut.Create("HarnessBox.lnk", executable, "HarnessBox 本地 AI 运行环境")
+	return shortcut.Create("DeepSeekHarnessBox.lnk", executable, "DeepSeekHarnessBox 本地 AI 运行环境")
 }
 
 // parsePortArg 解析 --port N 或 --port=N。返回 (端口, 是否显式指定)。

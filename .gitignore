@@ -2,7 +2,7 @@
 参考/
 
 # 构建产物
-HarnessBox.exe
+DeepSeekHarnessBox.exe
 payload/payload.zip
 payload/.payload-version
 *.syso

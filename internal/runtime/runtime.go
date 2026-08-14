@@ -5,14 +5,15 @@ package runtime
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/BeyondXinXin/harnessbox/internal/runlog"
-	"github.com/BeyondXinXin/harnessbox/payload"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/runlog"
+	"github.com/BeyondXinXin/deepseek-harness-box/payload"
 )
 
 const versionFile = ".version"
@@ -45,7 +46,31 @@ func Extract(base, version string, logger *runlog.Logger) (string, error) {
 	if err := os.WriteFile(filepath.Join(dir, versionFile), []byte(version), 0644); err != nil {
 		return "", fmt.Errorf("写入版本标记失败: %w", err)
 	}
+	logPayloadMeta(dir, logger)
 	return dir, nil
+}
+
+// payloadMeta 是打包时写入 payload.json 的运行环境元数据。
+type payloadMeta struct {
+	Version string `json:"version"`
+	Node    string `json:"node"`
+	Dsh     string `json:"dsh"`
+}
+
+// logPayloadMeta 把本次释放的运行环境内容（Node/DSH 版本）写入日志，
+// 便于排查现场实际使用的 DSH 版本。
+func logPayloadMeta(dir string, logger *runlog.Logger) {
+	data, err := os.ReadFile(filepath.Join(dir, "payload.json"))
+	if err != nil {
+		logger.Printf("读取运行环境元数据失败: %v", err)
+		return
+	}
+	var meta payloadMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		logger.Printf("解析运行环境元数据失败: %v", err)
+		return
+	}
+	logger.Printf("运行环境内容：Node %s，DSH %s", meta.Node, meta.Dsh)
 }
 
 func upToDate(dir, version string) bool {
