@@ -207,20 +207,36 @@ const credentialDescribeBody = `{"type":"client-request","rpcId":"harnessbox-dia
 // LogCredentialState 通过本地 dsh 的 /api 接口查询 DEEPSEEK_API_KEY 凭据的
 // 实际状态并写入日志，用于诊断「由启动环境提供（只读）」：writable=false
 // 说明该 Key 仍来自启动环境；writable=true 说明界面输入框已解锁。
+// web 就绪后 apiProxy 服务可能稍后才挂载，短暂重试几次保证日志稳定。
 func LogCredentialState(url string, logger *runlog.Logger) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Post(url+"/api/credentials.describe", "application/json", strings.NewReader(credentialDescribeBody))
-	if err != nil {
-		logger.Printf("诊断：查询凭据状态失败: %v", err)
+	target := url + "/api/credentials.describe"
+	var lastErr error
+	for attempt := 1; attempt <= 6; attempt++ {
+		if attempt > 1 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		resp, err := client.Post(target, "application/json", strings.NewReader(credentialDescribeBody))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		body := strings.TrimSpace(string(data))
+		if resp.StatusCode != http.StatusOK {
+			// apiProxy 尚未就绪时返回 404 not found，等一会儿再试。
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, body)
+			continue
+		}
+		logger.Printf("诊断：DEEPSEEK_API_KEY 凭据状态 %s", body)
 		return
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		logger.Printf("诊断：读取凭据状态响应失败: %v", err)
-		return
-	}
-	logger.Printf("诊断：DEEPSEEK_API_KEY 凭据状态 %s", strings.TrimSpace(string(data)))
+	logger.Printf("诊断：查询凭据状态失败: %v", lastErr)
 }
 
 func createKillOnCloseJob() (syscall.Handle, error) {

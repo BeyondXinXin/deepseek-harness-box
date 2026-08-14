@@ -84,7 +84,7 @@ HarnessBox 把「环境准备」这一步彻底省掉，让 Harness 的体验门
 所有运行数据都存放在本机用户目录，不污染系统、不写系统 PATH：
 
 ```text
-%LOCALAPPDATA%\HarnessBox\
+%LOCALAPPDATA%\BeyondXinXin\HarnessBox\
 ├─ runtime\     # 释放出的运行环境
 ├─ dsh-home\    # Harness 用户数据（会话 / 配置 / 存储）
 └─ logs\        # 运行日志
@@ -115,7 +115,7 @@ HarnessBox 把「环境准备」这一步彻底省掉，让 Harness 的体验门
 ## 常见问题（FAQ）
 
 **Q：双击后没反应或报错？**
-A：检查是否被安全软件拦截；如首次运行失败，可查看 `%LOCALAPPDATA%\HarnessBox\logs\` 下的日志定位原因。
+A：检查是否被安全软件拦截；如首次运行失败，可查看 `%LOCALAPPDATA%\BeyondXinXin\HarnessBox\logs\` 下的日志定位原因。
 
 **Q：端口被占用怎么办？**
 A：HarnessBox 会自动在 `3080–3089` 之间寻找空闲端口，一般无需手动处理。
@@ -130,7 +130,7 @@ A：HarnessBox 本身免费；但调用 API 产生的费用按 DeepSeek 官方�
 A：在系统托盘右键 HarnessBox 图标，选择「退出」。
 
 **Q：数据存在哪里？如何彻底删除？**
-A：见上文「数据存放位置」。删除 `%LOCALAPPDATA%\HarnessBox\` 目录并移除 EXE 即可。
+A：见上文「数据存放位置」。删除 `%LOCALAPPDATA%\BeyondXinXin\HarnessBox\` 目录并移除 EXE 即可。
 
 ---
 

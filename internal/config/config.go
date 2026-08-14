@@ -9,19 +9,23 @@ import (
 )
 
 const (
-	// AppName 是数据目录名，最终落在 %LOCALAPPDATA%\HarnessBox。
+	// AppVendor 是厂商目录名，数据根目录最终落在
+	// %LOCALAPPDATA%\BeyondXinXin\HarnessBox。
+	AppVendor = "BeyondXinXin"
+	// AppName 是应用数据目录名。
 	AppName = "HarnessBox"
 	// DefaultHost 是 dsh web 的监听地址。
 	DefaultHost = "127.0.0.1"
 )
 
-// Directory 返回 HarnessBox 的数据根目录，默认 %LOCALAPPDATA%\HarnessBox；
-// LOCALAPPDATA 缺失时回退到 fallbackDir\HarnessBox。
+// Directory 返回 HarnessBox 的数据根目录，默认
+// %LOCALAPPDATA%\BeyondXinXin\HarnessBox；LOCALAPPDATA 缺失时回退到
+// fallbackDir\BeyondXinXin\HarnessBox。
 func Directory(fallbackDir string) string {
 	if local := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); local != "" {
-		return filepath.Join(local, AppName)
+		return filepath.Join(local, AppVendor, AppName)
 	}
-	return filepath.Join(fallbackDir, AppName)
+	return filepath.Join(fallbackDir, AppVendor, AppName)
 }
 
 // Ensure 创建数据根目录与日志目录。

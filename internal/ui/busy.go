@@ -12,7 +12,6 @@ const (
 	wmTimer   = 0x0113
 	wmDestroy = 0x0002
 	wmSetFont = 0x0030
-
 	// 后台任务完成时通过该消息通知窗口关闭。
 	wmApp      = 0x8000
 	wmWorkDone = wmApp + 1
@@ -24,8 +23,9 @@ const (
 
 	wsExTopmost = 0x00000008
 
-	ssCenter = 0x0001
-	ssIcon   = 0x0003
+	ssCenter      = 0x0001
+	ssIcon        = 0x0003
+	ssCenterImage = 0x0200
 
 	swShow = 5
 
@@ -34,8 +34,6 @@ const (
 	// COLOR_BTNFACE+1 作为窗口类背景刷子，与 STATIC 控件默认背景一致，
 	// 避免文字控件与窗口背景出现色差。
 	colorBtnFace = 15
-	// DEFAULT_GUI_FONT：系统界面字体，保证中文按 UI 字体渲染。
-	defaultGuiFont = 17
 
 	imageIcon = 1
 	// rsrc（见 build.cmd）按顺序分配资源 ID：manifest 为 1，图标组
@@ -47,6 +45,9 @@ const (
 
 	timerID         = 1
 	timerIntervalMs = 400
+
+	// 提示文字布局参数（px，96 DPI）。
+	lineH = 26 // 单行文字高度（10.5pt 雅黑 + 行距）
 )
 
 var (
@@ -74,7 +75,8 @@ var (
 	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
 	procLoadImageW       = user32.NewProc("LoadImageW")
 	procLoadCursorW      = user32.NewProc("LoadCursorW")
-	procGetStockObject   = gdi32.NewProc("GetStockObject")
+	procCreateFontW      = gdi32.NewProc("CreateFontW")
+	procDeleteObject     = gdi32.NewProc("DeleteObject")
 )
 
 type wndClassEx struct {
@@ -110,6 +112,7 @@ type point struct {
 type busyState struct {
 	message string
 	static  uintptr
+	font    uintptr
 	dots    int
 }
 
@@ -184,6 +187,7 @@ func createWindow(message string) uintptr {
 	staticClassPtr, _ := syscall.UTF16PtrFromString("STATIC")
 
 	// 图标：优先本模块内嵌图标组（资源 ID 2），失败退回系统默认图标。
+	// SS_CENTERIMAGE + 全宽控件让图标水平居中。
 	icon, _, _ := procLoadImageW.Call(hInstance, groupIconResourceID, imageIcon, 0, 0, lrDefaultSize)
 	if icon == 0 {
 		icon, _, _ = procLoadImageW.Call(0, idiApplication, imageIcon, 0, 0, lrDefaultSize)
@@ -192,26 +196,29 @@ func createWindow(message string) uintptr {
 		0,
 		uintptr(unsafe.Pointer(staticClassPtr)),
 		0,
-		wsChild|wsVisible|ssIcon,
-		0, 0, 0, 0,
+		wsChild|wsVisible|ssIcon|ssCenterImage,
+		0, 18, uintptr(width), 32,
 		hwnd, 0, hInstance, 0,
 	)
 	if iconStatic != 0 {
 		_, _, _ = procSendMessageW.Call(iconStatic, stmSetIcon, icon, 0)
 	}
 
+	lineCount := len(strings.Split(message, "\n"))
 	textPtr, _ := syscall.UTF16PtrFromString(message)
 	state.static, _, _ = procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(staticClassPtr)),
 		uintptr(unsafe.Pointer(textPtr)),
 		wsChild|wsVisible|ssCenter,
-		24, 44, uintptr(width-48), uintptr(height-60),
+		24, 62, uintptr(width-48), uintptr(lineCount*lineH),
 		hwnd, 0, hInstance, 0,
 	)
-	font, _, _ := procGetStockObject.Call(defaultGuiFont)
-	if state.static != 0 && font != 0 {
-		_, _, _ = procSendMessageW.Call(state.static, wmSetFont, font, 1)
+	// 自定义微软雅黑 10.5pt 字体：比 DEFAULT_GUI_FONT 更大更清晰，
+	// 配合增大的行高避免两行文字挤在一起。
+	state.font = createMessageFont()
+	if state.static != 0 && state.font != 0 {
+		_, _, _ = procSendMessageW.Call(state.static, wmSetFont, state.font, 1)
 	}
 
 	_, _, _ = procSetTimer.Call(hwnd, timerID, timerIntervalMs, 0)
@@ -220,12 +227,13 @@ func createWindow(message string) uintptr {
 	return hwnd
 }
 
-// measure 按消息文本估算窗口尺寸：图标区域 + 多行文字 + 边距。
+// measure 按消息文本估算窗口尺寸：图标区域 + 多行文字 + 上下留白。
 func measure(message string) (int, int) {
 	const (
-		charW, lineH = 13, 20
-		padX, padY   = 24, 20
-		iconH        = 44 // 32px 图标 + 上下间距
+		charW = 14 // 10.5pt 雅黑中文宽度（px，96 DPI 估算）
+		padX  = 24 // 左右留白
+		iconH = 62 // 图标区域：18 上边距 + 32 图标 + 12 间距
+		padY  = 18 // 底部留白
 	)
 	lines := strings.Split(message, "\n")
 	maxLen := 0
@@ -235,19 +243,44 @@ func measure(message string) (int, int) {
 		}
 	}
 	width := maxLen*charW + padX*2
-	if width < 300 {
-		width = 300
+	if width < 320 {
+		width = 320
 	}
 	return width, iconH + len(lines)*lineH + padY
+}
+
+// createMessageFont 创建提示文字字体：Microsoft YaHei UI 10.5pt（负值
+// 高度 -14px，@96 DPI），CLEARTYPE 抗锯齿，中文显示比默认字体更清晰。
+func createMessageFont() uintptr {
+	namePtr, err := syscall.UTF16PtrFromString("Microsoft YaHei UI")
+	if err != nil {
+		return 0
+	}
+	// 负高度表示字符高度（不含行距）：10.5pt @96 DPI。经变量转换再传
+	// uintptr，避免常量负值转换溢出。
+	fontHeight := int32(-14)
+	font, _, _ := procCreateFontW.Call(
+		uintptr(fontHeight), // cHeight
+		0,                   // cWidth：由高度推导
+		0, 0,                // cEscapement, cOrientation
+		400,                 // cWeight：FW_NORMAL
+		0, 0, 0,             // bItalic, bUnderline, bStrikeOut
+		1,          // DEFAULT_CHARSET
+		0, 0, 5, 0, // OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH|FF_DONTCARE
+		uintptr(unsafe.Pointer(namePtr)),
+	)
+	return font
 }
 
 func wndProc(hwnd, message, wParam, lParam uintptr) uintptr {
 	switch uint32(message) {
 	case wmTimer:
-		// 省略号动画，向用户表明程序仍在工作。
+		// 省略号动画（固定 3 个点的宽度，空格补齐，避免文字居中跳动），
+		// 向用户表明程序仍在工作。
 		if state != nil && state.static != 0 {
 			state.dots = (state.dots + 1) % 4
-			textPtr, _ := syscall.UTF16PtrFromString(state.message + strings.Repeat(".", state.dots))
+			dots := strings.Repeat(".", state.dots) + strings.Repeat(" ", 3-state.dots)
+			textPtr, _ := syscall.UTF16PtrFromString(state.message + dots)
 			_, _, _ = procSetWindowTextW.Call(state.static, uintptr(unsafe.Pointer(textPtr)))
 		}
 		return 0
@@ -276,6 +309,9 @@ func messageLoop() {
 }
 
 func cleanup() {
+	if state != nil && state.font != 0 {
+		_, _, _ = procDeleteObject.Call(state.font)
+	}
 	classNamePtr, _ := syscall.UTF16PtrFromString("BeyondXinXin.HarnessBox.Busy")
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 	_, _, _ = procUnregisterClassW.Call(uintptr(unsafe.Pointer(classNamePtr)), hInstance)
