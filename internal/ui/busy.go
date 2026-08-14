@@ -230,7 +230,7 @@ func createWindow(message string) uintptr {
 // measure 按消息文本估算窗口尺寸：图标区域 + 多行文字 + 上下留白。
 func measure(message string) (int, int) {
 	const (
-		charW = 14 // 10.5pt 雅黑中文宽度（px，96 DPI 估算）
+		charW = 16 // 10.5pt 雅黑中文宽度（px，96 DPI 估算），留余量避免长文案贴边
 		padX  = 24 // 左右留白
 		iconH = 62 // 图标区域：18 上边距 + 32 图标 + 12 间距
 		padY  = 18 // 底部留白
@@ -243,8 +243,8 @@ func measure(message string) (int, int) {
 		}
 	}
 	width := maxLen*charW + padX*2
-	if width < 320 {
-		width = 320
+	if width < 360 {
+		width = 360
 	}
 	return width, iconH + len(lines)*lineH + padY
 }
