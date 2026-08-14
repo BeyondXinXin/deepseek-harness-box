@@ -27,6 +27,10 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          # 拉取完整历史，保证 git describe 能找到 tag，
+          # 否则 main 分支构建的版本号会退化为裸 commit hash。
+          fetch-depth: 0
 
       - name: 安装 Go
         uses: actions/setup-go@v5
