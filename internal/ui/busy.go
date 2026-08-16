@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"runtime"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -122,6 +123,10 @@ var state *busyState
 // work 完成后窗口自动关闭并返回其结果。message 中的 \n 按多行显示。
 // 窗口创建失败时降级为同步执行 work。
 func RunBusy(message string, work func() error) error {
+	// 窗口必须在同一个 OS 线程上创建、接收消息并退出：没有 LockOSThread
+	// 时 Go 可能把消息循环调度到其他线程，GetMessage 永远收不到窗口消息，
+	// 窗口卡死无法关闭。
+	runtime.LockOSThread()
 	hwnd := createWindow(message)
 	if hwnd == 0 {
 		return work()
