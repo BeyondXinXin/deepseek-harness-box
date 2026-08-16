@@ -14,6 +14,9 @@ const (
 	AppVendor = "BeyondXinXin"
 	// AppName 是应用数据目录名。
 	AppName = "DeepSeekHarnessBox"
+	// AppExeName 是主程序常驻副本的文件名，首次运行会把当前 EXE 复制为
+	// 该副本，桌面快捷方式始终指向这里。
+	AppExeName = "DeepSeekHarnessBox.exe"
 	// DefaultHost 是 dsh web 的监听地址。
 	DefaultHost = "127.0.0.1"
 )
@@ -39,6 +42,18 @@ func Ensure(base string) error {
 // RuntimeDir 返回运行环境释放目录（payload 解压后所在位置）。
 func RuntimeDir(base string) string {
 	return filepath.Join(base, "runtime")
+}
+
+// AppDir 返回主程序常驻副本目录。首次运行（或版本更新）时会把当前 EXE
+// 复制到这里，桌面快捷方式固定指向该副本，避免用户清理“下载”目录后
+// 快捷方式失效。
+func AppDir(base string) string {
+	return filepath.Join(base, "app")
+}
+
+// AppExePath 返回主程序常驻副本的完整路径。
+func AppExePath(base string) string {
+	return filepath.Join(AppDir(base), AppExeName)
 }
 
 // DshHomeDir 返回 DSH 用户数据目录（作为 DSH_HOME 传入子进程）。

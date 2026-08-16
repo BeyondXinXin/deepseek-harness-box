@@ -104,7 +104,8 @@ type iPersistFileVtbl struct {
 }
 
 // Create 在用户桌面创建名为 name（含 .lnk 后缀）的快捷方式，指向
-// targetPath。桌面已存在同名文件时不覆盖，原样返回其路径。
+// targetPath。桌面已存在同名快捷方式时先删除再重建，用于修复旧版本创建
+// 的指向“下载”目录等失效目标的快捷方式。
 func Create(name, targetPath, description string) (string, error) {
 	if _, err := os.Stat(targetPath); err != nil {
 		return "", fmt.Errorf("快捷方式目标不存在: %w", err)
@@ -114,13 +115,23 @@ func Create(name, targetPath, description string) (string, error) {
 		return "", err
 	}
 	linkPath := filepath.Join(desktop, name)
-	if _, err := os.Stat(linkPath); err == nil {
-		return linkPath, nil
+	if err := os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("删除旧快捷方式失败: %w", err)
 	}
 	if err := createShellLink(linkPath, targetPath, description); err != nil {
 		return "", err
 	}
 	return linkPath, nil
+}
+
+// Exists 报告桌面快捷方式 name 是否已存在。
+func Exists(name string) bool {
+	desktop, err := DesktopDir()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(desktop, name))
+	return err == nil
 }
 
 // DesktopDir 返回用户桌面目录。

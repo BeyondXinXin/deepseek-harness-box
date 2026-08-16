@@ -4,6 +4,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,13 +19,18 @@ import (
 	"github.com/BeyondXinXin/deepseek-harness-box/internal/portcheck"
 	"github.com/BeyondXinXin/deepseek-harness-box/internal/runlog"
 	hbruntime "github.com/BeyondXinXin/deepseek-harness-box/internal/runtime"
+	"github.com/BeyondXinXin/deepseek-harness-box/internal/shortcut"
 	"github.com/BeyondXinXin/deepseek-harness-box/internal/tray"
 	"github.com/BeyondXinXin/deepseek-harness-box/internal/ui"
 	"github.com/BeyondXinXin/deepseek-harness-box/internal/version"
 	"github.com/BeyondXinXin/deepseek-harness-box/internal/winutil"
 )
 
-const singleInstanceName = `Local\BeyondXinXin.DeepSeekHarnessBox.Instance`
+const (
+	singleInstanceName = `Local\BeyondXinXin.DeepSeekHarnessBox.Instance`
+	// shortcutName 是桌面快捷方式文件名。
+	shortcutName = "DeepSeekHarnessBox.lnk"
+)
 
 // 启动失败对话框的按钮 ID。退出按钮用 IDCANCEL(2)，这样 Esc / 标题栏 X
 // 关闭对话框也等同于选择退出。
@@ -99,6 +105,85 @@ func Main() {
 
 	process.Stop()
 	logger.Printf("DeepSeekHarnessBox 已退出")
+}
+
+// createDesktopShortcut 在用户桌面创建（或重建）指向 target 的快捷方式。
+func createDesktopShortcut(target string) (string, error) {
+	return shortcut.Create(shortcutName, target, "DeepSeekHarnessBox 本地 AI 运行环境")
+}
+
+// appVersionFile 是主程序副本旁的版本标记文件名（与运行环境标记一致）。
+const appVersionFile = ".version"
+
+// ensureAppCopy 确保数据目录的 app 子目录中存有与当前版本一致的主程序
+// 副本，返回桌面快捷方式应指向的 EXE 路径，以及本次是否执行了复制。
+// 复制失败不阻塞启动：退回当前 EXE 路径并记录日志。
+func ensureAppCopy(dataDir string, logger *runlog.Logger) (string, bool) {
+	current, err := os.Executable()
+	if err != nil {
+		logger.Printf("获取当前可执行文件路径失败: %v", err)
+		return "", false
+	}
+	target := config.AppExePath(dataDir)
+	if appCopyUpToDate(target, version.Version) {
+		return target, false
+	}
+	if err := os.MkdirAll(config.AppDir(dataDir), 0755); err != nil {
+		logger.Printf("创建主程序目录失败: %v", err)
+		return current, false
+	}
+	logger.Printf("复制主程序副本到 %s（版本 %s）", target, version.Version)
+	if err := copyExecutable(current, target); err != nil {
+		logger.Printf("复制主程序副本失败: %v", err)
+		return current, false
+	}
+	if err := os.WriteFile(filepath.Join(config.AppDir(dataDir), appVersionFile), []byte(version.Version), 0644); err != nil {
+		logger.Printf("写入主程序版本标记失败: %v", err)
+	}
+	return target, true
+}
+
+// appCopyUpToDate 报告主程序副本是否存在且版本标记与当前版本一致。
+func appCopyUpToDate(target, ver string) bool {
+	if _, err := os.Stat(target); err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(target), appVersionFile))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(data)) == ver
+}
+
+// copyExecutable 以流式复制可执行文件到 dst：先写临时文件再替换目标，
+// 避免复制中断留下损坏的半截文件。
+func copyExecutable(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	tmp := dst + ".tmp"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Windows 下 os.Rename 不能覆盖已存在文件，先删除旧副本再改名。
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
 }
 
 // startLoop 反复尝试启动：任一步失败都会弹出「启动失败」对话框，用户可选择
@@ -187,21 +272,43 @@ func startOnce(dataDir string, explicitPort int, hasExplicitPort bool, logger *r
 		return err
 	}
 
-	if hbruntime.NeedsExtract(runtimeDir, version.Version) {
+	// 主程序常驻副本：首次运行（或版本更新）时把当前 EXE 复制到
+	// %LOCALAPPDATA%\...\app\DeepSeekHarnessBox.exe，桌面快捷方式永远指向
+	// 该副本，用户之后清理“下载”目录也不会让桌面图标失效。
+	var appExe string
+	appCopied := false
+	firstExtract := hbruntime.NeedsExtract(runtimeDir, version.Version)
+	if firstExtract {
 		// 首次启动（或版本升级、修复后）需要解压运行环境，弹出「正在初始化」
-		// 窗口避免用户误以为卡死。
+		// 窗口避免用户误以为卡死；窗口期间一并完成主程序副本复制。
 		logger.Printf("释放运行环境到 %s", runtimeDir)
 		err = ui.RunBusy(
 			"正在释放运行环境，请稍候\n首次启动或修复后需要重新释放内置环境，可能需要一点时间",
-			extract,
+			func() error {
+				appExe, appCopied = ensureAppCopy(dataDir, logger)
+				return extract()
+			},
 		)
 		if err != nil {
 			logger.Printf("释放运行环境失败: %v", err)
 			return nil, port, fmt.Errorf("释放运行环境失败: %w", err)
 		}
-	} else if err = extract(); err != nil {
-		logger.Printf("释放运行环境失败: %v", err)
-		return nil, port, fmt.Errorf("释放运行环境失败: %w", err)
+	} else {
+		appExe, appCopied = ensureAppCopy(dataDir, logger)
+		if err = extract(); err != nil {
+			logger.Printf("释放运行环境失败: %v", err)
+			return nil, port, fmt.Errorf("释放运行环境失败: %w", err)
+		}
+	}
+
+	// 首次运行/升级、副本刚被更新或桌面快捷方式缺失时，创建（或重建）
+	// 快捷方式，目标固定为 app 目录下的常驻副本。
+	if appExe != "" && (firstExtract || appCopied || !shortcut.Exists(shortcutName)) {
+		if linkPath, linkErr := createDesktopShortcut(appExe); linkErr != nil {
+			logger.Printf("创建桌面快捷方式失败: %v", linkErr)
+		} else {
+			logger.Printf("桌面快捷方式已创建: %s", linkPath)
+		}
 	}
 
 	nodePath := filepath.Join(runtimeDir, "node", "node.exe")
